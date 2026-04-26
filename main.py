@@ -144,10 +144,11 @@ class MainWindow(QWidget):
     def plot_receive_data(self, data_str:str):
         try:
             # 计算时差
+            self.receive_cnt += 1
             if self.receive_cnt >= self.COUNT_PERIOD_CNT:
                 cur_time = time.time()
                 gap = (cur_time - self.last_time) *1000
-                print(f"间隔: {cur_time:.2f}s - {self.last_time:.2f}s = {gap:.2f}ms, 频率: {self.receive_cnt/1000/gap:.2f} Hz")
+                print(f"间隔: {cur_time:.2f}s - {self.last_time:.2f}s = {gap:.2f}ms, 频率: {self.COUNT_PERIOD_CNT/(gap/1000):.2f} Hz")
                 self.last_time = cur_time
                 self.receive_cnt = 0
             
@@ -155,10 +156,9 @@ class MainWindow(QWidget):
             if self.plot_window is None:
                 return
             tar, cur = map(int, data_str.strip("()").split(","))
-            print(f"解析: tar->{tar}, cur->{cur}")
             self.plot_window.receive_data(tar, cur)
         except Exception as e:
-            print(f"解析错误：{e}")
+            print(f"接收解析错误：{e}")
     
     # 发送更新参数
     def auto_update_by_flag(self):
