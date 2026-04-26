@@ -2,7 +2,7 @@ import serial
 from PySide6.QtCore import QThread, Signal
 
 class SerialThread(QThread):
-    data_received_signal = Signal(str)
+    data_received_signal = Signal(bytes)
     error_signal = Signal(str)
 
     def __init__(self, port, baudrate):
@@ -23,9 +23,9 @@ class SerialThread(QThread):
             while self.running:
                 if self.serial_port.in_waiting > 0:
                     # 一行数据 (\n标志)
-                    line = self.serial_port.readline().decode('utf-8').strip()
-                    if line:
-                        self.data_received_signal.emit(line)
+                    data = self.serial_port.read(self.serial_port.in_waiting)
+                    if data:
+                        self.data_received_signal.emit(data)
 
         except Exception as e:
             self.error_signal.emit(f"串口错误: {str(e)}")

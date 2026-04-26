@@ -4,6 +4,8 @@ import uart
 import win
 import time
 import ui_main
+import data_parse
+from collections import deque
 
 """ 
 接收格式： (target,current)
@@ -26,6 +28,8 @@ class MainWindow(QWidget):
         self.ui = ui_main.Ui_Form()
         self.ui.setupUi(self)
         self.auto_send_flag = False # 自动发送参数标志位
+        self.uart_rx_buffer = b""
+        self.pid_result_deque = deque(maxlen=200)
 
         # 绑定事件 展示图
         self.ui.btn_show_curve.clicked.connect(self.show_plot_window)
@@ -116,12 +120,9 @@ class MainWindow(QWidget):
         # 绑定线程的信号到处理函数
         self.serial_thread.error_signal.connect(self.handle_serial_error)
         
-        # 窗口画线
+        # 接收回调，窗口画线
         self.serial_thread.data_received_signal.connect(self.plot_receive_data)
         self.last_time = time.time()
-        
-        # 也接一个到主界面的状态栏更新一下
-        self.serial_thread.data_received_signal.connect(lambda data_str: self.ui.label_cur_status.setText(f"状态: 接收中 ({data_str})"))
 
         # 3. 启动线程
         self.serial_thread.start()
@@ -141,22 +142,44 @@ class MainWindow(QWidget):
         self.stop_serial()
         
     # 曲线窗口接收到数据
-    def plot_receive_data(self, data_str:str):
+    def plot_receive_data(self, data_bytes:bytes):
+        # 更新缓冲区
+        self.uart_rx_buffer += data_bytes
         try:
-            # 计算时差
-            self.receive_cnt += 1
-            if self.receive_cnt >= self.COUNT_PERIOD_CNT:
-                cur_time = time.time()
-                gap = (cur_time - self.last_time) *1000
-                print(f"间隔: {cur_time:.2f}s - {self.last_time:.2f}s = {gap:.2f}ms, 频率: {self.COUNT_PERIOD_CNT/(gap/1000):.2f} Hz")
-                self.last_time = cur_time
-                self.receive_cnt = 0
-            
-            # 做图
-            if self.plot_window is None:
-                return
-            tar, cur = map(int, data_str.strip("()").split(","))
-            self.plot_window.receive_data(tar, cur)
+            while(True):
+                index = self.uart_rx_buffer.find(data_parse.PidResult.PID_RESULT_HAED_)
+                if index < 0: 
+                    # print("没接到..")
+                    return # 没接收到
+                self.uart_rx_buffer = self.uart_rx_buffer[index: ]
+                if len(self.uart_rx_buffer) < data_parse.PidResult.PID_RESULT_SIZE: 
+                    # print("没接够..")
+                    return # 没接够
+                # 截取缓存区
+                frame = self.uart_rx_buffer[ :data_parse.PidResult.PID_RESULT_SIZE]
+                self.uart_rx_buffer = self.uart_rx_buffer[data_parse.PidResult.PID_RESULT_SIZE: ]
+                pid_result = data_parse.PidResult.from_frame(frame)
+                self.pid_result_deque.append(pid_result)
+
+                # 计算时差
+                self.receive_cnt += 1
+                if self.receive_cnt >= self.COUNT_PERIOD_CNT:
+                    cur_time = time.time()
+                    gap = (cur_time - self.last_time) *1000
+                    print(f"间隔: {cur_time:.2f}s - {self.last_time:.2f}s = {gap:.2f}ms, 频率: {self.COUNT_PERIOD_CNT/(gap/1000):.2f} Hz")
+                    self.last_time = cur_time
+                    self.receive_cnt = 0
+
+                # 获取信息
+                info_str = f"out({pid_result.out:+.1f}) = P({pid_result.P:+.1f}) + I({pid_result.I:+.1f})) + D({pid_result.D:+.1f})"
+                err_str = f"last_err({pid_result.last_err}) new_err({pid_result.new_err})"
+                tar_and_cur = f"({pid_result.target},{pid_result.current})"
+                # 更新状态
+                self.ui.label_cur_status.setText(tar_and_cur)
+                # 做图
+                if self.plot_window is not None: 
+                    self.plot_window.receive_data(pid_result.target, pid_result.current, info_str, err_str)
+
         except Exception as e:
             print(f"接收解析错误：{e}")
     
