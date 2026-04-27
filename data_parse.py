@@ -1,6 +1,26 @@
 import struct 
 from dataclasses import dataclass
 
+""" 
+对应的C结构体:
+#pragma pack(push, 1)   // 强制对齐，方便解析，但是引用速度变慢
+typedef struct {        // 长一点帧头，防止误判
+    uint8_t head1;  // 0xAF
+    uint8_t head2;  // 0xAA
+    uint8_t head3;  // 0xFA
+    int target;
+    int current;
+    int last_err;
+    int new_err;
+    float P;
+    float I;
+    float D;
+    float out;
+} PID_Result_Frame_t;
+#pragma pack(pop)
+"""
+
+
 @dataclass
 class PidResult:
     # 类常量

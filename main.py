@@ -8,7 +8,23 @@ import data_parse
 from collections import deque
 
 """ 
-接收格式： (target,current)
+接收结构体数据：(c语言)
+#pragma pack(push, 1)   // 强制对齐，方便解析，但是引用速度变慢
+typedef struct {        // 长一点帧头，防止误判
+    uint8_t head1;  // 0xAF
+    uint8_t head2;  // 0xAA
+    uint8_t head3;  // 0xFA
+    int target;
+    int current;
+    int last_err;
+    int new_err;
+    float P;
+    float I;
+    float D;
+    float out;
+} PID_Result_Frame_t;
+#pragma pack(pop)
+
 发送格式： (t:_,p:_,i:_,d:_)
 """
 
@@ -171,7 +187,7 @@ class MainWindow(QWidget):
                     self.receive_cnt = 0
 
                 # 获取信息
-                info_str = f"out({pid_result.out:+.1f}) = P({pid_result.P:+.1f}) + I({pid_result.I:+.1f})) + D({pid_result.D:+.1f})"
+                info_str = f"out({pid_result.out:>+4.1f}) = P({pid_result.P:>+5.1f}) + I({pid_result.I:>+4.1f}) + D({pid_result.D:>+4.1f})"
                 err_str = f"last_err({pid_result.last_err}) new_err({pid_result.new_err})"
                 tar_and_cur = f"({pid_result.target},{pid_result.current})"
                 # 更新状态
@@ -198,7 +214,8 @@ class MainWindow(QWidget):
         if self.serial_thread is not None and self.serial_thread.serial_port.is_open:
             self.serial_thread.send_data(data_str)
             print(f"已发送：{data_str.strip()}")
-        print(f"未发送：{data_str.strip()}, 因为串口未打开")
+        else:
+            print(f"未发送：{data_str.strip()}, 因为串口未打开")
 
     # 重写窗口关闭事件，保证安全退出
     def closeEvent(self, event):
